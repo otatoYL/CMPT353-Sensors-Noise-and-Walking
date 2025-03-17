@@ -1,156 +1,252 @@
-import numpy as np
 import pandas as pd
-from scipy import signal
+import numpy as np
 import matplotlib.pyplot as plt
+from scipy.spatial.transform import Rotation
+import os
 
 
-# 1. Load data
-def load_data(filename):
-    # Adjust for specific app output format if needed
-    data = pd.read_csv(filename)
-    return data
+class SensorData:
+    """Class for handling smartphone sensor data collection and preprocessing"""
+
+    def __init__(self, sampling_rate=50):
+        """Initialize sensor data object with given sampling rate"""
+        self.sampling_rate = sampling_rate
+        self.calibration_data = None
+        self.data = None
+        self.orientation_data = None
+
+    def load_from_file(self, filename):
+        """Load sensor data from CSV file"""
+        try:
+            data = pd.read_csv(filename)
+            required_cols = ['acc_x', 'acc_y', 'acc_z']
+
+            # Check if required columns exist
+            missing_cols = [col for col in required_cols if col not in data.columns]
+            if missing_cols:
+                print(f"Warning: Missing required columns: {missing_cols}")
+                return None
+
+            # If time column doesn't exist, create it
+            if 'time' not in data.columns:
+                data['time'] = np.arange(len(data)) / self.sampling_rate
+
+            self.data = data
+            print(f"Loaded {len(data)} samples from {filename}")
+            return data
+
+        except Exception as e:
+            print(f"Error loading data: {e}")
+            return None
+
+    def collect_calibration_data(self, seconds=5):
+        """
+        This method would integrate with a sensor collection app
+        For now, it's a placeholder to show how calibration data could be collected
+        """
+        print(f"Stand still for {seconds} seconds to calibrate sensors...")
+        # In a real implementation, this would interface with a data collection app
+        print("Calibration complete")
+
+    def apply_calibration(self, start_seconds=1, end_seconds=1):
+        """Apply calibration to remove sensor bias"""
+        if self.data is None:
+            print("No data loaded")
+            return None
+
+        calibrated_data = self.data.copy()
+
+        # Calculate samples for calibration periods
+        start_samples = int(start_seconds * self.sampling_rate)
+        end_samples = int(end_seconds * self.sampling_rate)
+
+        if len(self.data) < start_samples + end_samples:
+            print("Warning: Data too short for reliable calibration")
+            return calibrated_data
+
+        # Calculate bias for each axis using specified periods
+        for axis in ['acc_x', 'acc_y', 'acc_z']:
+            if axis in self.data.columns:
+                start_bias = self.data[axis][:start_samples].mean()
+                end_bias = self.data[axis][-end_samples:].mean()
+                avg_bias = (start_bias + end_bias) / 2
+
+                print(f"Removing {axis} bias: {avg_bias:.4f}")
+                calibrated_data[axis] = self.data[axis] - avg_bias
+
+        return calibrated_data
+
+    def calculate_magnitude(self, data=None):
+        """Calculate acceleration magnitude from XYZ components"""
+        if data is None:
+            data = self.data
+
+        if data is None:
+            print("No data available")
+            return None
+
+        # Check if required columns exist
+        required_cols = ['acc_x', 'acc_y', 'acc_z']
+        missing_cols = [col for col in required_cols if col not in data.columns]
+        if missing_cols:
+            print(f"Missing required columns for magnitude calculation: {missing_cols}")
+            return None
+
+        # Calculate magnitude
+        data['acc_magnitude'] = np.sqrt(
+            data['acc_x'] ** 2 + data['acc_y'] ** 2 + data['acc_z'] ** 2
+        )
+
+        return data
+
+    def correct_orientation(self, data=None, gyro_cols=None):
+        """
+        Advanced feature: Correct sensor orientation using gyroscope data
+        This helps maintain consistent "forward" and "down" directions
+        """
+        if data is None:
+            data = self.data
+
+        if data is None:
+            print("No data available")
+            return None
+
+        # Check if gyroscope data is available
+        if gyro_cols is None:
+            gyro_cols = ['gyro_x', 'gyro_y', 'gyro_z']
+
+        missing_gyro = [col for col in gyro_cols if col not in data.columns]
+        if missing_gyro:
+            print(f"Warning: Missing gyroscope data columns: {missing_gyro}")
+            print("Orientation correction skipped.")
+            return data
+
+        corrected_data = data.copy()
+        dt = 1.0 / self.sampling_rate
+
+        # Initial orientation (identity quaternion)
+        orientation = Rotation.identity()
+
+        # Store corrected accelerations
+        acc_corrected_x = []
+        acc_corrected_y = []
+        acc_corrected_z = []
+
+        # For each time step
+        for i in range(len(data)):
+            # Get angular velocities
+            omega_x = data[gyro_cols[0]].iloc[i]
+            omega_y = data[gyro_cols[1]].iloc[i]
+            omega_z = data[gyro_cols[2]].iloc[i]
+
+            # Update orientation using gyroscope data
+            omega = np.array([omega_x, omega_y, omega_z])
+            delta_q = Rotation.from_rotvec(omega * dt)
+            orientation = orientation * delta_q
+
+            # Get original acceleration
+            acc = np.array([
+                data['acc_x'].iloc[i],
+                data['acc_y'].iloc[i],
+                data['acc_z'].iloc[i]
+            ])
+
+            # Transform acceleration to global frame
+            acc_global = orientation.apply(acc)
+
+            # Store corrected values
+            acc_corrected_x.append(acc_global[0])
+            acc_corrected_y.append(acc_global[1])
+            acc_corrected_z.append(acc_global[2])
+
+        # Update data with corrected values
+        corrected_data['acc_x_corrected'] = acc_corrected_x
+        corrected_data['acc_y_corrected'] = acc_corrected_y
+        corrected_data['acc_z_corrected'] = acc_corrected_z
+
+        return corrected_data
+
+    def visualize_raw_data(self, filename=None):
+        """Visualize raw sensor data"""
+        if self.data is None:
+            print("No data loaded")
+            return
+
+        plt.figure(figsize=(12, 8))
+
+        # Plot acceleration data
+        plt.subplot(2, 1, 1)
+        plt.plot(self.data['time'], self.data['acc_x'], 'r-', label='X-axis')
+        plt.plot(self.data['time'], self.data['acc_y'], 'g-', label='Y-axis')
+        plt.plot(self.data['time'], self.data['acc_z'], 'b-', label='Z-axis')
+
+        plt.title('Raw Accelerometer Data')
+        plt.xlabel('Time (s)')
+        plt.ylabel('Acceleration (m/s²)')
+        plt.legend()
+        plt.grid(True)
+
+        # Plot magnitude if available
+        if 'acc_magnitude' in self.data.columns:
+            plt.subplot(2, 1, 2)
+            plt.plot(self.data['time'], self.data['acc_magnitude'], 'k-', label='Magnitude')
+            plt.title('Acceleration Magnitude')
+            plt.xlabel('Time (s)')
+            plt.ylabel('Acceleration (m/s²)')
+            plt.legend()
+            plt.grid(True)
+
+        plt.tight_layout()
+
+        # Save figure if filename provided
+        if filename:
+            if not os.path.exists('results'):
+                os.makedirs('results')
+            plt.savefig(os.path.join('results', filename))
+
+        plt.show()
 
 
-# 2. Preprocessing and calibration
-def calibrate(data, calibration_seconds=1):
-    # Use stationary data for calibration
-    start_samples = int(calibration_seconds * sampling_rate)
-    end_samples = int(calibration_seconds * sampling_rate)
+def record_sensor_data(output_file, recording_time=30, sampling_rate=50):
+    """
+    Placeholder function for recording sensor data
+    In a real implementation, this would interface with a smartphone app
+    """
+    print(f"Recording sensor data for {recording_time} seconds at {sampling_rate} Hz...")
+    print(f"Data will be saved to {output_file}")
 
-    start_bias = data[:start_samples].mean()
-    end_bias = data[-end_samples:].mean()
-    avg_bias = (start_bias + end_bias) / 2
+    print("\nThis is a placeholder function. To collect real data:")
+    print("1. Use an app like Physics Toolbox Sensor Suite on your smartphone")
+    print("2. Record acceleration data and export it as CSV")
+    print("3. Make sure the CSV has columns: time, acc_x, acc_y, acc_z")
+    print("4. Stand still for 1-2 seconds at the beginning and end for calibration")
 
-    # Remove bias
-    calibrated_data = data - avg_bias
-    return calibrated_data
-
-
-# 3. Apply Butterworth filter
-def apply_filter(data, cutoff=2.0, fs=50, order=4):
-    # Design lowpass filter (cutoff Hz)
-    b, a = signal.butter(order, cutoff / (fs / 2), btype='low')
-
-    # Apply filter
-    filtered_data = signal.filtfilt(b, a, data)
-    return filtered_data
+    return None
 
 
-# 4. Step detection
-def detect_steps(data, threshold=0.5):
-    # Simple threshold-based step detection
-    steps = []
-    step_count = 0
+def example_usage():
+    """Example usage of the SensorData class"""
+    # Create sensor data object
+    sensor = SensorData(sampling_rate=50)
 
-    for i in range(1, len(data)):
-        if data[i - 1] < threshold and data[i] >= threshold:
-            steps.append(i)
-            step_count += 1
+    # Load data
+    data = sensor.load_from_file('data/walking_data.csv')
 
-    return steps, step_count
+    # Apply calibration
+    calibrated_data = sensor.apply_calibration()
 
+    # Calculate magnitude
+    data_with_magnitude = sensor.calculate_magnitude(calibrated_data)
 
-# 5. Calculate gait metrics
-def calculate_gait_features(steps, data, time_data):
-    # Calculate cadence (steps per minute)
-    if len(steps) < 2:
-        return None
+    # Visualize raw data
+    sensor.visualize_raw_data('raw_data_visualization.png')
 
-    total_time = time_data[steps[-1]] - time_data[steps[0]]
-    cadence = (len(steps) - 1) / (total_time / 60)
-
-    return {
-        'cadence': cadence,
-        'step_count': len(steps)
-    }
+    return data_with_magnitude
 
 
-# 6. Perform FFT analysis
-def analyze_frequency(data, fs):
-    # Get frequency components using FFT
-    n = len(data)
-    fft_result = np.fft.fft(data)
-    freq = np.fft.fftfreq(n, 1 / fs)
-
-    # Only keep positive frequencies
-    pos_mask = freq > 0
-    freqs = freq[pos_mask]
-    magnitude = np.abs(fft_result[pos_mask])
-
-    # Find dominant frequency
-    dominant_idx = np.argmax(magnitude)
-    dominant_freq = freqs[dominant_idx]
-
-    return freqs, magnitude, dominant_freq
-
-
-# Main function
-def process_walking_data(filename, sampling_rate=50):
-    # Load and preprocess data
-    raw_data = load_data(filename)
-
-    # Extract relevant columns
-    time = raw_data['time']
-    acc_x = raw_data['acc_x']
-    acc_y = raw_data['acc_y']
-    acc_z = raw_data['acc_z']
-
-    # Calculate acceleration magnitude
-    acc_mag = np.sqrt(acc_x ** 2 + acc_y ** 2 + acc_z ** 2)
-
-    # Calibrate and filter
-    calibrated_acc = calibrate(acc_z)  # Using vertical acceleration
-    filtered_acc = apply_filter(calibrated_acc, cutoff=2.0, fs=sampling_rate)
-
-    # Detect steps
-    steps, step_count = detect_steps(filtered_acc, threshold=0.2)
-
-    # Calculate gait parameters
-    features = calculate_gait_features(steps, filtered_acc, time)
-
-    # Analyze frequency components
-    freqs, magnitude, dominant_freq = analyze_frequency(filtered_acc, sampling_rate)
-
-    # Visualization
-    plt.figure(figsize=(12, 8))
-
-    # Plot raw and filtered data
-    plt.subplot(3, 1, 1)
-    plt.plot(time, acc_z, 'b-', alpha=0.3, label='Raw data')
-    plt.plot(time, filtered_acc, 'r-', label='Filtered data')
-    plt.legend()
-    plt.title('Accelerometer Data')
-
-    # Mark detected steps
-    plt.subplot(3, 1, 2)
-    plt.plot(time, filtered_acc)
-    plt.plot(time[steps], filtered_acc[steps], 'go', label='Steps')
-    plt.title(f'Step Detection (Count: {step_count}, Cadence: {features["cadence"]:.2f} steps/min)')
-    plt.legend()
-
-    # Plot frequency spectrum
-    plt.subplot(3, 1, 3)
-    plt.plot(freqs, magnitude)
-    plt.axvline(x=dominant_freq, color='r', linestyle='--',
-                label=f'Dominant freq: {dominant_freq:.2f} Hz')
-    plt.title('Frequency Spectrum')
-    plt.xlabel('Frequency (Hz)')
-    plt.legend()
-
-    plt.tight_layout()
-    plt.show()
-
-    return {
-        'step_count': step_count,
-        'cadence': features['cadence'],
-        'dominant_frequency': dominant_freq
-    }
-
-
-# Example usage
 if __name__ == "__main__":
-    sampling_rate = 50  # Hz
-    results = process_walking_data('walking_data.csv', sampling_rate)
-    print(f"Steps detected: {results['step_count']}")
-    print(f"Cadence: {results['cadence']:.2f} steps/minute")
-    print(f"Dominant frequency: {results['dominant_frequency']:.2f} Hz")
+    print("Sensor data module. Import this module to use its functions.")
+    print("Example usage:")
+    print("from sensor import SensorData")
+    print("sensor = SensorData()")
+    print("data = sensor.load_from_file('your_data.csv')")
