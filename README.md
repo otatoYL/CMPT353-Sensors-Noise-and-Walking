@@ -7,7 +7,7 @@ Functions
 - Visualization: Graph acceleration and gait characteristics.
 
 Use method
-1. Install the dependencies: `pip install numpy pandas scipy matplotlib`. 2.
+1. Install the dependencies: `pip install numpy pandas scipy matplotlib`. 
 2. Collect data: Record acceleration data using an application such as Physics Toolbox Sensor Suite.
 3. Run the analysis script: `python gait_analysis.py your_data_file.csv
 
