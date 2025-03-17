@@ -15,3 +15,8 @@ File instruction
 - `gait_analysis.py`: The main analysis script.
 - `data/`: Stores collected sensor data.
 - `results/`: Houses the analysis results and graphs.
+
+
+Requirements
+Python 3.6+
+Required libraries: numpy, pandas, scipy, matplotlib
