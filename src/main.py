@@ -4,9 +4,9 @@ import matplotlib.pyplot as plt
 from analysis_utils import estimate_sampling_rate, extract_features
 
 positions = {
-    "ankle": "data/ankle.csv",
-    "hand": "data/hand.csv",
-    "pocket": "data/pocket.csv"
+    "ankle": "../data/ankle.csv",
+    "hand": "../data/hand.csv",
+    "pocket": "../data/pocket.csv"
 }
 
 os.makedirs("results/plots", exist_ok=True)
