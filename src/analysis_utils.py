@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.fft import fft, fftfreq
-from filter_utils import butterworth_filter
+from bw_filter_data import butterworth_filter
 
 def estimate_sampling_rate(time_array):
     time_diffs = np.diff(time_array)
