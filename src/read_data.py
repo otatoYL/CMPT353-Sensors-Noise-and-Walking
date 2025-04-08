@@ -3,20 +3,42 @@ import  os
 
 
 def process_sensorlog_csv(path):
-    print("📋 文件列名：", pd.read_csv(path, nrows=1).columns.tolist())
-    df = pd.read_csv(path, usecols=[
-        'accelerometerTimestamp_sinceReboot(s)',
-        'accelerometerAccelerationX(G)',
-        'accelerometerAccelerationY(G)',
-        'accelerometerAccelerationZ(G)',
-    ])
-    df = df.rename(columns={
-        'accelerometerTimestamp_sinceReboot(s)': 'seconds',
-        'accelerometerAccelerationX(G)': 'x',
-        'accelerometerAccelerationY(G)': 'y',
-        'accelerometerAccelerationZ(G)': 'z',
-    })
+    preview = pd.read_csv(path, nrows=5)
+    cols = preview.columns.tolist()
+
+    if 'accelerometerTimestamp_sinceReboot(s)' in cols:
+        df = pd.read_csv(path, usecols=[
+            'accelerometerTimestamp_sinceReboot(s)',
+            'accelerometerAccelerationX(G)',
+            'accelerometerAccelerationY(G)',
+            'accelerometerAccelerationZ(G)'
+        ])
+        df = df.rename(columns={
+            'accelerometerTimestamp_sinceReboot(s)': 'seconds',
+            'accelerometerAccelerationX(G)': 'x',
+            'accelerometerAccelerationY(G)': 'y',
+            'accelerometerAccelerationZ(G)': 'z',
+        })
+
+    elif 'Time (s)' in cols and 'Linear Acceleration x (m/s^2)' in cols:
+        df = pd.read_csv(path, usecols=[
+            'Time (s)',
+            'Linear Acceleration x (m/s^2)',
+            'Linear Acceleration y (m/s^2)',
+            'Linear Acceleration z (m/s^2)',
+        ])
+        df = df.rename(columns={
+            'Time (s)': 'seconds',
+            'Linear Acceleration x (m/s^2)': 'x',
+            'Linear Acceleration y (m/s^2)': 'y',
+            'Linear Acceleration z (m/s^2)': 'z',
+        })
+
+    else:
+        raise ValueError(f"❌ 无法识别文件结构（列名）：{cols}")
+
     return df[['seconds', 'x', 'y', 'z']]
+
 
 def trim_data(df, start, end):
    df = df[(df['seconds'] >= start) & (df['seconds'] <= end)]
@@ -32,17 +54,14 @@ def main():
         # 'y_pocket2': 'Y-pocket(2).csv',
         'y_pocket3': 'Y-pocket(3).csv',
         'y_pocket4': 'Y-pocket(4).csv',
-        # 'hand': 'hand.csv',
-        # 'pocket': 'pocket.csv',
-        # 'ankle': 'ankle.csv',
+        'hand': 'hand.csv',
+        'pocket': 'pocket.csv',
+        'ankle': 'ankle.csv',
     }
 
-    for outname , filename in files.items():
+    for outname, filename in files.items():
         df = process_sensorlog_csv(f'../data/{filename}')
-        if df['seconds'].iloc[-1]  >= 30:
-            df.to_csv(f'processed_data/{filename}', index=False)
-        else:
-            print(f'skipping {filename}: too short')
+        df.to_csv(f'processed_data/{filename}', index=False)
 
 if __name__ == '__main__':
     main()
