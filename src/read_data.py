@@ -34,9 +34,6 @@ def process_sensorlog_csv(path):
             'Linear Acceleration z (m/s^2)': 'z',
         })
 
-    else:
-        raise ValueError(f"❌ 无法识别文件结构（列名）：{cols}")
-
     return df[['seconds', 'x', 'y', 'z']]
 
 
