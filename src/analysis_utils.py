@@ -4,6 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.fft import fft, fftfreq
 from bw_filter_data import butterworth_filter
+from tabulate import tabulate
 
 def estimate_sampling_rate(time_array):
     time_diffs = np.diff(time_array)
@@ -99,7 +100,9 @@ def main():
                 print(f" Fail to analyze {fname}: {e}")
 
     if summary:
-        pd.DataFrame(summary).to_csv("results/summary.csv", index=False)
+        df_summary = pd.DataFrame(summary)
+        df_summary.to_csv("results/summary.csv", index=False)
+        print(tabulate(df_summary, headers='keys', tablefmt='pretty'))
         print("summary.csv saved successfully")
     else:
         print("️There is no result")
