@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from scipy.fft import fft
 
-def extrat_vector_features(path, label):
+def extract_vector_features(path, label):
     df = pd.read_csv(path)
     z = df['z'].values
     fs = 1 / np.mean(np.diff(df['seconds'].values))
